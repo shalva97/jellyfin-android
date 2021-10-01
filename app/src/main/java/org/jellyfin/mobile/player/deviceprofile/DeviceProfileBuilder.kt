@@ -121,7 +121,7 @@ class DeviceProfileBuilder {
         )
     }
 
-    fun getDeviceProfile(): DeviceProfile {
+    fun getDeviceProfile(maxBitrate: Int? = null): DeviceProfile {
         val containerProfiles = ArrayList<ContainerProfile>()
         val directPlayProfiles = ArrayList<DirectPlayProfile>()
         val codecProfiles = ArrayList<CodecProfile>()
@@ -158,6 +158,8 @@ class DeviceProfileBuilder {
             containerProfiles = containerProfiles,
             codecProfiles = codecProfiles,
             subtitleProfiles = getSubtitleProfiles(EXO_EMBEDDED_SUBTITLES, EXO_EXTERNAL_SUBTITLES),
+            maxStaticBitrate = maxBitrate,
+            maxStreamingBitrate = maxBitrate,
 
             // TODO: remove redundant defaults after API/SDK is fixed
             maxAlbumArtWidth = Int.MAX_VALUE,
