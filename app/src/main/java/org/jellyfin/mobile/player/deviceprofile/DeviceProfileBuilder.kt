@@ -15,29 +15,116 @@ import org.jellyfin.sdk.model.api.TranscodeSeekInfo
 import org.jellyfin.sdk.model.api.TranscodingProfile
 
 class DeviceProfileBuilder {
+    private val supportedVideoCodecs: Array<Array<String>>
+    private val supportedAudioCodecs: Array<Array<String>>
+
+    private val transcodingProfiles: List<TranscodingProfile>
 
     init {
         require(SUPPORTED_CONTAINER_FORMATS.size == AVAILABLE_VIDEO_CODECS.size && SUPPORTED_CONTAINER_FORMATS.size == AVAILABLE_AUDIO_CODECS.size)
+
+        // Load Android-supported codecs
+        val videoCodecs: MutableMap<String, DeviceCodec.Video> = HashMap()
+        val audioCodecs: MutableMap<String, DeviceCodec.Audio> = HashMap()
+        val androidCodecs = MediaCodecList(MediaCodecList.REGULAR_CODECS)
+        for (codecInfo in androidCodecs.codecInfos) {
+            if (codecInfo.isEncoder) continue
+
+            for (mimeType in codecInfo.supportedTypes) {
+                val codec = DeviceCodec.from(codecInfo.getCapabilitiesForType(mimeType)) ?: continue
+                val name = codec.name
+                when (codec) {
+                    is DeviceCodec.Video -> {
+                        if (videoCodecs.containsKey(name)) {
+                            videoCodecs[name] = videoCodecs[name]!!.mergeCodec(codec)
+                        } else {
+                            videoCodecs[name] = codec
+                        }
+                    }
+                    is DeviceCodec.Audio -> {
+                        if (audioCodecs.containsKey(mimeType)) {
+                            audioCodecs[name] = audioCodecs[name]!!.mergeCodec(codec)
+                        } else {
+                            audioCodecs[name] = codec
+                        }
+                    }
+                }
+            }
+        }
+
+        // Build map of supported codecs from device support and hardcoded data
+        supportedVideoCodecs = Array(AVAILABLE_VIDEO_CODECS.size) { i ->
+            AVAILABLE_VIDEO_CODECS[i].filter { codec ->
+                videoCodecs.containsKey(codec)
+            }.toTypedArray()
+        }
+        supportedAudioCodecs = Array(AVAILABLE_AUDIO_CODECS.size) { i ->
+            AVAILABLE_AUDIO_CODECS[i].filter { codec ->
+                audioCodecs.containsKey(codec) || codec in FORCED_AUDIO_CODECS
+            }.toTypedArray()
+        }
+
+        transcodingProfiles = listOf(
+            TranscodingProfile(
+                type = DlnaProfileType.VIDEO,
+                container = "ts",
+                videoCodec = "h264",
+                audioCodec = "mp1,mp2,mp3,aac,ac3,eac3,dts,mlp,truehd",
+                context = EncodingContext.STREAMING,
+                protocol = "hls",
+
+                // TODO: remove redundant defaults after API/SDK is fixed
+                estimateContentLength = false,
+                enableMpegtsM2TsMode = false,
+                transcodeSeekInfo = TranscodeSeekInfo.AUTO,
+                copyTimestamps = false,
+                enableSubtitlesInManifest = false,
+                minSegments = 0,
+                segmentLength = 0,
+                breakOnNonKeyFrames = false,
+            ),
+            TranscodingProfile(
+                type = DlnaProfileType.VIDEO,
+                container = "mkv",
+                videoCodec = "h264",
+                audioCodec = AVAILABLE_AUDIO_CODECS[SUPPORTED_CONTAINER_FORMATS.indexOf("mkv")].joinToString(","),
+                context = EncodingContext.STREAMING,
+                protocol = "hls",
+
+                // TODO: remove redundant defaults after API/SDK is fixed
+                estimateContentLength = false,
+                enableMpegtsM2TsMode = false,
+                transcodeSeekInfo = TranscodeSeekInfo.AUTO,
+                copyTimestamps = false,
+                enableSubtitlesInManifest = false,
+                minSegments = 0,
+                segmentLength = 0,
+                breakOnNonKeyFrames = false,
+            ),
+            TranscodingProfile(
+                type = DlnaProfileType.AUDIO,
+                container = "mp3",
+                audioCodec = "mp3",
+                context = EncodingContext.STREAMING,
+                protocol = "http",
+
+                // TODO: remove redundant defaults after API/SDK is fixed
+                estimateContentLength = false,
+                enableMpegtsM2TsMode = false,
+                transcodeSeekInfo = TranscodeSeekInfo.AUTO,
+                copyTimestamps = false,
+                enableSubtitlesInManifest = false,
+                minSegments = 0,
+                segmentLength = 0,
+                breakOnNonKeyFrames = false,
+            ),
+        )
     }
 
     fun getDeviceProfile(): DeviceProfile {
         val containerProfiles = ArrayList<ContainerProfile>()
         val directPlayProfiles = ArrayList<DirectPlayProfile>()
         val codecProfiles = ArrayList<CodecProfile>()
-
-        val (androidVideoCodecs, androidAudioCodecs) = getAndroidCodecs()
-
-        val supportedVideoCodecs = Array(AVAILABLE_VIDEO_CODECS.size) { i ->
-            AVAILABLE_VIDEO_CODECS[i].filter { codec ->
-                androidVideoCodecs.containsKey(codec)
-            }.toTypedArray()
-        }
-
-        val supportedAudioCodecs = Array(AVAILABLE_AUDIO_CODECS.size) { i ->
-            AVAILABLE_AUDIO_CODECS[i].filter { codec ->
-                androidAudioCodecs.containsKey(codec) || codec in FORCED_AUDIO_CODECS
-            }.toTypedArray()
-        }
 
         for (i in SUPPORTED_CONTAINER_FORMATS.indices) {
             val container = SUPPORTED_CONTAINER_FORMATS[i]
@@ -67,7 +154,7 @@ class DeviceProfileBuilder {
         return DeviceProfile(
             name = Constants.APP_INFO_NAME,
             directPlayProfiles = directPlayProfiles,
-            transcodingProfiles = getTranscodingProfiles(),
+            transcodingProfiles = transcodingProfiles,
             containerProfiles = containerProfiles,
             codecProfiles = codecProfiles,
             subtitleProfiles = getSubtitleProfiles(EXO_EMBEDDED_SUBTITLES, EXO_EXTERNAL_SUBTITLES),
@@ -109,102 +196,6 @@ class DeviceProfileBuilder {
         enableMsMediaReceiverRegistrar = false,
         ignoreTranscodeByteRangeRequests = false,
     )
-
-    @Suppress("NestedBlockDepth")
-    private fun getAndroidCodecs(): Pair<Map<String, DeviceCodec.Video>, Map<String, DeviceCodec.Audio>> {
-        val videoCodecs: MutableMap<String, DeviceCodec.Video> = HashMap()
-        val audioCodecs: MutableMap<String, DeviceCodec.Audio> = HashMap()
-
-        val androidCodecs = MediaCodecList(MediaCodecList.REGULAR_CODECS)
-        for (codecInfo in androidCodecs.codecInfos) {
-            if (codecInfo.isEncoder) continue
-
-            for (mimeType in codecInfo.supportedTypes) {
-                val codec = DeviceCodec.from(codecInfo.getCapabilitiesForType(mimeType)) ?: continue
-                val name = codec.name
-                when (codec) {
-                    is DeviceCodec.Video -> {
-                        if (videoCodecs.containsKey(name)) {
-                            videoCodecs[name] = videoCodecs[name]!!.mergeCodec(codec)
-                        } else {
-                            videoCodecs[name] = codec
-                        }
-                    }
-                    is DeviceCodec.Audio -> {
-                        if (audioCodecs.containsKey(mimeType)) {
-                            audioCodecs[name] = audioCodecs[name]!!.mergeCodec(codec)
-                        } else {
-                            audioCodecs[name] = codec
-                        }
-                    }
-                }
-            }
-        }
-
-        return videoCodecs to audioCodecs
-    }
-
-    private fun getTranscodingProfiles(): List<TranscodingProfile> = ArrayList<TranscodingProfile>().apply {
-        add(
-            TranscodingProfile(
-                type = DlnaProfileType.VIDEO,
-                container = "ts",
-                videoCodec = "h264",
-                audioCodec = "mp1,mp2,mp3,aac,ac3,eac3,dts,mlp,truehd",
-                context = EncodingContext.STREAMING,
-                protocol = "hls",
-
-                // TODO: remove redundant defaults after API/SDK is fixed
-                estimateContentLength = false,
-                enableMpegtsM2TsMode = false,
-                transcodeSeekInfo = TranscodeSeekInfo.AUTO,
-                copyTimestamps = false,
-                enableSubtitlesInManifest = false,
-                minSegments = 0,
-                segmentLength = 0,
-                breakOnNonKeyFrames = false,
-            )
-        )
-        add(
-            TranscodingProfile(
-                type = DlnaProfileType.VIDEO,
-                container = "mkv",
-                videoCodec = "h264",
-                audioCodec = AVAILABLE_AUDIO_CODECS[SUPPORTED_CONTAINER_FORMATS.indexOf("mkv")].joinToString(","),
-                context = EncodingContext.STREAMING,
-                protocol = "hls",
-
-                // TODO: remove redundant defaults after API/SDK is fixed
-                estimateContentLength = false,
-                enableMpegtsM2TsMode = false,
-                transcodeSeekInfo = TranscodeSeekInfo.AUTO,
-                copyTimestamps = false,
-                enableSubtitlesInManifest = false,
-                minSegments = 0,
-                segmentLength = 0,
-                breakOnNonKeyFrames = false,
-            )
-        )
-        add(
-            TranscodingProfile(
-                type = DlnaProfileType.AUDIO,
-                container = "mp3",
-                audioCodec = "mp3",
-                context = EncodingContext.STREAMING,
-                protocol = "http",
-
-                // TODO: remove redundant defaults after API/SDK is fixed
-                estimateContentLength = false,
-                enableMpegtsM2TsMode = false,
-                transcodeSeekInfo = TranscodeSeekInfo.AUTO,
-                copyTimestamps = false,
-                enableSubtitlesInManifest = false,
-                minSegments = 0,
-                segmentLength = 0,
-                breakOnNonKeyFrames = false,
-            )
-        )
-    }
 
     private fun getSubtitleProfiles(embedded: Array<String>, external: Array<String>): List<SubtitleProfile> = ArrayList<SubtitleProfile>().apply {
         for (format in embedded) {
