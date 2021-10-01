@@ -16,18 +16,17 @@ import com.google.android.exoplayer2.util.Util
 import kotlinx.coroutines.channels.Channel
 import okhttp3.OkHttpClient
 import org.jellyfin.mobile.MainViewModel
-import org.jellyfin.mobile.player.deviceprofile.DeviceProfileBuilder
-import org.jellyfin.mobile.bridge.ExternalPlayer
-import org.jellyfin.mobile.setup.ConnectFragment
-import org.jellyfin.mobile.webapp.WebViewFragment
 import org.jellyfin.mobile.player.audio.car.LibraryBrowser
+import org.jellyfin.mobile.player.deviceprofile.DeviceProfileBuilder
 import org.jellyfin.mobile.player.interaction.PlayerEvent
-import org.jellyfin.mobile.player.ui.PlayerFragment
 import org.jellyfin.mobile.player.source.MediaSourceResolver
+import org.jellyfin.mobile.player.ui.PlayerFragment
+import org.jellyfin.mobile.setup.ConnectFragment
 import org.jellyfin.mobile.utils.Constants
 import org.jellyfin.mobile.utils.PermissionRequestHelper
 import org.jellyfin.mobile.utils.isLowRamDevice
 import org.jellyfin.mobile.webapp.RemoteVolumeProvider
+import org.jellyfin.mobile.webapp.WebViewFragment
 import org.jellyfin.mobile.webapp.WebappFunctionChannel
 import org.koin.android.ext.koin.androidApplication
 import org.koin.androidx.fragment.dsl.fragment
@@ -61,8 +60,6 @@ val applicationModule = module {
     // Media player helpers
     single { MediaSourceResolver(get()) }
     single { DeviceProfileBuilder() }
-    single { get<DeviceProfileBuilder>().getDeviceProfile() }
-    single(named(ExternalPlayer.DEVICE_PROFILE_NAME)) { get<DeviceProfileBuilder>().getExternalPlayerProfile() }
 
     // ExoPlayer factories
     single<DataSource.Factory> {

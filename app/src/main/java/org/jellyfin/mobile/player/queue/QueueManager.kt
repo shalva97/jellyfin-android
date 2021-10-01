@@ -13,9 +13,10 @@ import com.google.android.exoplayer2.source.ProgressiveMediaSource
 import com.google.android.exoplayer2.source.SingleSampleMediaSource
 import com.google.android.exoplayer2.source.hls.HlsMediaSource
 import com.google.android.exoplayer2.trackselection.DefaultTrackSelector
-import org.jellyfin.mobile.player.interaction.PlayOptions
 import org.jellyfin.mobile.player.PlayerException
 import org.jellyfin.mobile.player.PlayerViewModel
+import org.jellyfin.mobile.player.deviceprofile.DeviceProfileBuilder
+import org.jellyfin.mobile.player.interaction.PlayOptions
 import org.jellyfin.mobile.player.source.JellyfinMediaSource
 import org.jellyfin.mobile.player.source.MediaSourceResolver
 import org.jellyfin.mobile.utils.clearSelectionAndDisableRendererByType
@@ -23,7 +24,6 @@ import org.jellyfin.mobile.utils.selectTrackByTypeAndGroup
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.videosApi
 import org.jellyfin.sdk.api.operations.VideosApi
-import org.jellyfin.sdk.model.api.DeviceProfile
 import org.jellyfin.sdk.model.api.MediaProtocol
 import org.jellyfin.sdk.model.api.MediaStream
 import org.jellyfin.sdk.model.api.PlayMethod
@@ -37,12 +37,13 @@ class QueueManager(
 ) : KoinComponent {
     private val apiClient: ApiClient = get()
     private val mediaSourceResolver: MediaSourceResolver by inject()
-    private val deviceProfile: DeviceProfile by inject()
+    private val deviceProfileBuilder: DeviceProfileBuilder by inject()
     private val videosApi: VideosApi = apiClient.videosApi
     val trackSelector = DefaultTrackSelector(viewModel.getApplication<Application>())
     private val _mediaQueue: MutableLiveData<QueueItem.Loaded> = MutableLiveData()
     val mediaQueue: LiveData<QueueItem.Loaded> get() = _mediaQueue
 
+    private var deviceProfile = deviceProfileBuilder.getDeviceProfile()
     private var currentPlayOptions: PlayOptions? = null
 
     /**
